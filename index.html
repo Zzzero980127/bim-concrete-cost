@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BIM 混凝土成本自動化估算系統 Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            bg: '#0b0f17',
+                            card: '#111827',
+                            border: '#1f2937',
+                            hover: '#1e293b'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0b0f17; }
+        ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #374151; }
+        /* 讓圖表在視窗縮小時跟著縮，不撐出水平捲軸 */
+        main > div, .grid > * { min-width: 0; }
+    </style>
+</head>
+<body class="bg-dark-bg text-slate-200 font-sans antialiased min-h-screen flex flex-col">
+
+    <header class="bg-dark-card/80 backdrop-blur border-b border-dark-border sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 min-h-16 flex items-center justify-between gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-gradient-to-tr from-cyan-600 to-blue-600 rounded-lg text-white shadow-lg">
+                    <i class="fa-solid fa-cubes-stacked text-xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h1 class="font-bold text-base sm:text-lg text-white tracking-wide">BIM 混凝土成本動態估算系統</h1>
+                        <span id="sample-badge" class="hidden shrink-0 px-2 py-0.5 text-xs bg-amber-950 text-amber-400 border border-amber-800 rounded-full">示範資料</span>
+                    </div>
+                    <p class="text-xs text-slate-400">Autodesk Forma Takeoff 算量 + Python GitHub Actions 自動計價</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <div class="hidden md:flex items-center space-x-2 text-xs font-mono bg-dark-bg px-3 py-1.5 rounded-lg border border-dark-border">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span class="text-slate-400">最後更新:</span>
+                    <span class="text-emerald-400 font-medium" id="generated-at">--</span>
+                </div>
+
+                <a id="repo-link" href="#" target="_blank" class="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-2 rounded-lg border border-slate-700 transition">
+                    <i class="fa-brands fa-github text-base"></i>
+                    <span class="hidden sm:inline font-medium">專題 Repository</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <div id="load-error" class="hidden bg-rose-950/60 border border-rose-800 text-rose-300 text-sm rounded-xl p-4"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+
+            <!-- 最新單價 -->
+            <div class="bg-dark-card border border-dark-border rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+                <div class="absolute -right-4 -bottom-4 opacity-10 text-cyan-500 pointer-events-none">
+                    <i class="fa-solid fa-chart-line text-8xl"></i>
+                </div>
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-xs text-slate-400 font-medium tracking-wider">最新混凝土單價</span>
+                    <span class="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono" id="price-date">--</span>
+                </div>
+                <div>
+                    <div class="flex items-baseline space-x-2">
+                        <span class="text-2xl font-bold font-mono text-white" id="price-280">--</span>
+                        <span class="text-xs text-slate-400">/ m³</span>
+                        <span class="text-xs font-medium" id="price-280-change"></span>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-1">基準：280 kgf/cm² 預拌混凝土</p>
+                </div>
+                <div class="mt-3 pt-2 border-t border-dark-border/60 flex justify-between text-[11px] text-slate-400 font-mono">
+                    <span>210 kgf: <strong class="text-slate-300" id="price-210">--</strong></span>
+                    <span>350 kgf: <strong class="text-slate-300" id="price-350">--</strong></span>
+                </div>
+            </div>
+
+            <!-- 目前模型版本 -->
+            <div class="bg-dark-card border border-dark-border rounded-xl p-4 flex flex-col justify-between">
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-xs text-slate-400 font-medium tracking-wider">目前計算模型</span>
+                    <span class="px-2 py-0.5 text-[10px] font-semibold bg-cyan-950 text-cyan-400 border border-cyan-800 rounded" id="active-version-badge">--</span>
+                </div>
+                <div>
+                    <div class="text-base font-bold text-white font-mono truncate" id="active-filename">--</div>
+                    <div class="text-xs text-slate-400 mt-0.5 flex items-center space-x-2">
+                        <span><i class="fa-regular fa-clock mr-1"></i>匯入日期: <span id="active-date">--</span></span>
+                        <span>•</span>
+                        <span id="active-author">--</span>
+                    </div>
+                </div>
+                <div class="mt-3 pt-2 border-t border-dark-border/60 flex items-center justify-between">
+                    <span class="text-xs text-slate-400">體積來源:</span>
+                    <span class="text-xs font-mono text-emerald-400 flex items-center">
+                        <i class="fa-solid fa-file-excel text-[10px] mr-1"></i>Forma Takeoff 匯出
+                    </span>
+                </div>
+            </div>
+
+            <!-- GitHub Actions -->
+            <div class="lg:col-span-2 bg-gradient-to-r from-dark-card via-dark-card to-slate-900 border border-dark-border rounded-xl p-4 flex flex-col justify-between">
+                <div class="flex justify-between items-center mb-2">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-bolt text-amber-400"></i>
+                        <span class="text-xs font-semibold text-white tracking-wider">GitHub Actions 自動化 Pipeline</span>
+                    </div>
+                    <span class="text-[11px] text-slate-400 font-mono">Workflow: <code class="text-cyan-400">bim_auto_cost.yml</code></span>
+                </div>
+
+                <p class="text-xs text-slate-400 mb-3">
+                    每天 08:00 自動執行：讀取 Takeoff 匯出的體積 → 取得最新單價 → 重新計算成本 → 更新本頁。上傳新的匯出檔時也會立即重算。
+                </p>
+
+                <div class="flex items-center space-x-3">
+                    <a id="run-pipeline-link" href="#" target="_blank" class="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium text-xs py-2.5 px-4 rounded-lg shadow-lg flex items-center justify-center space-x-2 transition active:scale-95">
+                        <i class="fa-solid fa-play"></i>
+                        <span>前往 GitHub 手動執行重新估算</span>
+                    </a>
+                    <div class="flex items-center space-x-1.5 text-xs text-slate-400 bg-dark-bg px-3 py-2 rounded-lg border border-dark-border">
+                        <i class="fa-solid fa-circle-check text-emerald-400"></i>
+                        <span class="font-mono" id="pipeline-status-text">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-dark-card border border-dark-border rounded-xl p-4">
+                <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
+                    <span>混凝土總體積</span>
+                    <i class="fa-solid fa-cube text-cyan-400"></i>
+                </div>
+                <div class="flex items-baseline justify-between">
+                    <span class="text-2xl font-bold font-mono text-white" id="kpi-volume">--</span>
+                    <span class="text-xs font-mono text-slate-400">m³</span>
+                </div>
+                <div class="mt-2 text-[11px] text-slate-400" id="kpi-volume-diff"></div>
+            </div>
+
+            <div class="bg-dark-card border border-dark-border rounded-xl p-4">
+                <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
+                    <span>動態總估算成本</span>
+                    <i class="fa-solid fa-coins text-amber-400"></i>
+                </div>
+                <div class="flex items-baseline justify-between">
+                    <span class="text-2xl font-bold font-mono text-cyan-400" id="kpi-cost">--</span>
+                </div>
+                <div class="mt-2 text-[11px] text-slate-400" id="kpi-cost-diff"></div>
+            </div>
+
+            <div class="bg-dark-card border border-dark-border rounded-xl p-4">
+                <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
+                    <span>本週成本變動（單價影響）</span>
+                    <i class="fa-solid fa-tag text-emerald-400"></i>
+                </div>
+                <div class="flex items-baseline justify-between">
+                    <span class="text-2xl font-bold font-mono text-white" id="kpi-price-effect">--</span>
+                </div>
+                <div class="mt-2 text-[11px] text-slate-400">
+                    <span>單價來源：<span id="price-source">--</span></span>
+                </div>
+            </div>
+
+            <div class="bg-dark-card border border-dark-border rounded-xl p-4">
+                <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
+                    <span>結構元件總數</span>
+                    <i class="fa-solid fa-building text-blue-400"></i>
+                </div>
+                <div class="flex items-baseline justify-between">
+                    <span class="text-2xl font-bold font-mono text-white" id="kpi-elements">--</span>
+                    <span class="text-xs font-mono text-slate-400">個物件</span>
+                </div>
+                <div class="mt-2 text-[11px] text-slate-400" id="kpi-elements-detail"></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="bg-dark-card border border-dark-border rounded-xl p-5 flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-semibold text-white flex items-center">
+                        <i class="fa-solid fa-chart-pie mr-2 text-cyan-400"></i>各結構構件體積占比 (m³)
+                    </h3>
+                    <span class="text-xs text-slate-400 font-mono">Forma Takeoff</span>
+                </div>
+                <div class="relative h-64 flex items-center justify-center">
+                    <canvas id="volumePieChart"></canvas>
+                </div>
+                <div class="mt-4 grid grid-cols-2 gap-2 text-xs font-mono border-t border-dark-border pt-3" id="pie-legend"></div>
+            </div>
+
+            <div class="lg:col-span-2 bg-dark-card border border-dark-border rounded-xl p-5 flex flex-col justify-between">
+                <div class="flex flex-wrap gap-2 items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-sm font-semibold text-white flex items-center">
+                            <i class="fa-solid fa-chart-column mr-2 text-emerald-400"></i>跨版本算量與總成本比較
+                        </h3>
+                        <p class="text-xs text-slate-400">各版本皆以最新單價計算，方便公平比較</p>
+                    </div>
+                    <div class="flex items-center space-x-1 bg-dark-bg p-1 rounded-lg border border-dark-border" id="version-buttons"></div>
+                </div>
+
+                <div class="relative h-64">
+                    <canvas id="versionTrendChart"></canvas>
+                </div>
+                <div class="flex justify-between text-[11px] font-mono mt-1">
+                    <span class="text-cyan-400">體積 (m³)</span>
+                    <span class="text-amber-400">金額 (萬元)</span>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-dark-border flex items-center justify-between text-xs text-slate-400">
+                    <div class="flex items-center space-x-4">
+                        <span class="flex items-center"><span class="w-3 h-3 bg-cyan-500 rounded mr-1.5"></span> 混凝土體積 (m³)</span>
+                        <span class="flex items-center"><span class="w-3 h-3 bg-amber-500 rounded mr-1.5"></span> 總造價 (NT$)</span>
+                    </div>
+                    <span class="font-mono text-[11px] text-slate-400"><i class="fa-solid fa-circle-info mr-1"></i>點版本按鈕切換明細</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 每週成本追蹤 -->
+        <div class="bg-dark-card border border-dark-border rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-white flex items-center">
+                        <i class="fa-solid fa-chart-line mr-2 text-amber-400"></i>成本追蹤（模型版本 × 當時單價）
+                    </h3>
+                    <p class="text-xs text-slate-400">每個點是一次自動執行的結果；換版本的跳動來自體積變化，其餘起伏來自單價變化</p>
+                </div>
+            </div>
+            <div class="relative h-56">
+                <canvas id="costHistoryChart"></canvas>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 bg-dark-card border border-dark-border rounded-xl p-5 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-sm font-semibold text-white flex items-center">
+                            <i class="fa-solid fa-table-list mr-2 text-blue-400"></i>Forma Takeoff 體積與單價計算明細
+                        </h3>
+                        <span class="text-xs font-mono text-slate-400" id="table-version">--</span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs font-mono">
+                            <thead>
+                                <tr class="bg-dark-bg text-slate-400 border-b border-dark-border">
+                                    <th class="p-2.5 rounded-l">Revit 結構類別</th>
+                                    <th class="p-2.5">材質規格</th>
+                                    <th class="p-2.5 text-right">數量 (m³)</th>
+                                    <th class="p-2.5 text-right">最新單價</th>
+                                    <th class="p-2.5 text-right rounded-r">小計金額 (NT$)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-dark-border/60 text-slate-200" id="quantities-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-dark-border flex items-center justify-between text-xs text-slate-400">
+                    <span>* 體積來自 Forma Takeoff 匯出檔，單價依各構件混凝土強度套用。</span>
+                    <span class="font-mono font-semibold text-white" id="table-total-sum">--</span>
+                </div>
+            </div>
+
+            <div class="bg-dark-card border border-dark-border rounded-xl p-5 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-semibold text-white flex items-center">
+                            <i class="fa-solid fa-terminal mr-2 text-cyan-400"></i>最近一次 Workflow 執行日誌
+                        </h3>
+                    </div>
+                    <div class="bg-black/80 rounded-lg p-3 font-mono text-[11px] text-slate-300 h-64 overflow-y-auto space-y-1.5 border border-dark-border" id="terminal-logs"></div>
+                </div>
+                <div class="mt-3 text-[11px] text-slate-400 font-mono">由 scripts/build_data.py 實際輸出</div>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="bg-dark-card border-t border-dark-border mt-8 py-4">
+        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-400 font-mono">
+            BIM 混凝土成本自動化估算系統專題成果展示 • Autodesk Forma Takeoff + Python + GitHub Actions
+        </div>
+    </footer>
+
+    <script>
+        // 改成你的 GitHub repo 網址
+        const REPO_URL = 'https://github.com/Zzzero980127/bim-concrete-cost';
+
+        const ELEMENT_NAMES = {
+            floors: 'Structural Floors (樓板)',
+            columns: 'Structural Columns (結構柱)',
+            beams: 'Structural Framing (結構梁)',
+            walls: 'Structural Walls (剪力牆)'
+        };
+        const SHORT_NAMES = { floors: '板', columns: '柱', beams: '梁', walls: '牆' };
+        const COLORS = { floors: '#06b6d4', columns: '#3b82f6', beams: '#10b981', walls: '#f59e0b' };
+        const ORDER = ['floors', 'columns', 'beams', 'walls'];
+
+        const TAG_COLORS = { INFO: 'text-blue-400', TAKEOFF: 'text-amber-400', MODEL: 'text-cyan-400', PRICE: 'text-purple-400', SUCCESS: 'text-emerald-400' };
+
+        let data, volumePieChart, versionTrendChart, costHistoryChart;
+
+        const nt = n => 'NT$ ' + Math.round(n).toLocaleString('en-US');
+        const signed = (n, fmt) => (n > 0 ? '+' : n < 0 ? '−' : '±') + fmt(Math.abs(n));
+
+        function priceFor(el, prices) {
+            return prices[el.grade] ?? prices['280'] ?? Object.values(prices)[0];
+        }
+
+        function diffSpan(n, fmt) {
+            const cls = n > 0 ? 'text-rose-400' : n < 0 ? 'text-emerald-400' : 'text-slate-400';
+            return `<span class="${cls} font-medium">${signed(n, fmt)}</span>`;
+        }
+
+        async function init() {
+            document.getElementById('repo-link').href = REPO_URL;
+            document.getElementById('run-pipeline-link').href = REPO_URL + '/actions/workflows/bim_auto_cost.yml';
+
+            try {
+                const res = await fetch('data.json', { cache: 'no-store' });
+                data = await res.json();
+            } catch (e) {
+                const box = document.getElementById('load-error');
+                box.classList.remove('hidden');
+                box.innerHTML = '讀不到 data.json。直接雙擊開啟 HTML 時瀏覽器會擋下讀檔，請改用 <code>python -m http.server</code> 或放到 GitHub Pages 上開啟。';
+                return;
+            }
+
+            renderHeader();
+            // 等字型載入完再畫圖，否則圖表用預設字型量寬度，換字型後刻度會壓到軸標題
+            await document.fonts.ready;
+            initCharts();
+            renderVersionButtons();
+            showVersion(data.versions.length - 1);
+            renderLogs();
+        }
+
+        function renderHeader() {
+            const p = data.prices, prev = data.previous_prices;
+            document.getElementById('sample-badge').classList.toggle('hidden', !data.is_sample);
+            document.getElementById('generated-at').innerText = data.generated_at;
+            document.getElementById('pipeline-status-text').innerText = data.generated_at;
+            document.getElementById('price-date').innerText = data.price_date;
+            document.getElementById('price-280').innerText = nt(p['280']);
+            document.getElementById('price-210').innerText = p['210'] ? nt(p['210']) : '--';
+            document.getElementById('price-350').innerText = p['350'] ? nt(p['350']) : '--';
+            document.getElementById('price-source').innerText = data.price_source || '--';
+
+            const pct = (p['280'] - prev['280']) / prev['280'] * 100;
+            document.getElementById('price-280-change').innerHTML = diffSpan(pct, v => v.toFixed(1) + '%');
+
+            // 本週成本變動：只看單價造成的差異（同一個最新模型）
+            const latest = data.versions[data.versions.length - 1];
+            const effect = ORDER.filter(k => latest.elements[k]).reduce((acc, k) => {
+                const el = latest.elements[k];
+                return acc + el.volume * (priceFor(el, p) - priceFor(el, prev));
+            }, 0);
+            document.getElementById('kpi-price-effect').innerHTML = diffSpan(effect, nt);
+        }
+
+        function initCharts() {
+            Chart.defaults.color = '#9ca3af';
+            Chart.defaults.font.family = 'JetBrains Mono';
+
+            volumePieChart = new Chart(document.getElementById('volumePieChart'), {
+                type: 'doughnut',
+                data: { labels: [], datasets: [{ data: [], backgroundColor: [], borderColor: '#111827', borderWidth: 2 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '70%',
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.label}: ${c.raw} m³` } } }
+                }
+            });
+
+            versionTrendChart = new Chart(document.getElementById('versionTrendChart'), {
+                type: 'bar',
+                data: {
+                    labels: data.versions.map(v => `${v.version} ${v.note}`),
+                    datasets: [
+                        { label: '混凝土總體積 (m³)', data: data.versions.map(v => v.total_volume), backgroundColor: 'rgba(6, 182, 212, 0.6)', borderColor: '#06b6d4', borderWidth: 1, yAxisID: 'y', order: 1 },
+                        // order 較小的畫在上層，折線才不會被半透明長條蓋成綠色
+                        { label: '總造價 (NT$)', data: data.versions.map(v => v.cost_at_current_price), type: 'line', borderColor: '#f59e0b', backgroundColor: '#f59e0b', borderWidth: 2, pointRadius: 4, yAxisID: 'y1', order: 0 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { color: '#1f2937' } },
+                        y: { position: 'left', grid: { color: '#1f2937' }, ticks: { color: '#06b6d4' } },
+                        y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#f59e0b', callback: v => (v / 10000).toLocaleString() } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            costHistoryChart = new Chart(document.getElementById('costHistoryChart'), {
+                type: 'line',
+                data: {
+                    labels: data.cost_history.map(c => c.date.slice(5)),
+                    datasets: [{
+                        label: '總成本 (NT$)',
+                        data: data.cost_history.map(c => c.cost),
+                        borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.12)', fill: true,
+                        borderWidth: 2, pointRadius: 3, stepped: false, tension: 0.2
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { grid: { color: '#1f2937' } },
+                        y: { grid: { color: '#1f2937' }, ticks: { callback: v => (v / 10000).toLocaleString() + ' 萬' } }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: c => ` ${data.cost_history[c.dataIndex].version}：${nt(c.raw)}` } }
+                    }
+                }
+            });
+        }
+
+        function renderVersionButtons() {
+            const box = document.getElementById('version-buttons');
+            box.innerHTML = data.versions.map((v, i) =>
+                `<button onclick="showVersion(${i})" id="btn-v${i}" class="text-xs px-2.5 py-1 rounded font-mono transition">${v.version}</button>`
+            ).join('');
+        }
+
+        function showVersion(i) {
+            const v = data.versions[i];
+            const prev = data.versions[i - 1];
+            const p = data.prices;
+
+            data.versions.forEach((_, k) => {
+                document.getElementById(`btn-v${k}`).className = k === i
+                    ? 'text-xs px-2.5 py-1 rounded font-mono bg-cyan-600 text-white font-medium transition'
+                    : 'text-xs px-2.5 py-1 rounded font-mono text-slate-400 hover:text-white transition';
+            });
+
+            document.getElementById('active-version-badge').innerText = `${v.version} - ${v.note}`;
+            document.getElementById('active-filename').innerText = v.model_name;
+            document.getElementById('active-date').innerText = v.detected_at;
+            document.getElementById('active-author').innerText = v.author || '--';
+            document.getElementById('table-version').innerText = v.version;
+
+            document.getElementById('kpi-volume').innerText = v.total_volume.toLocaleString('en-US', { minimumFractionDigits: 2 });
+            document.getElementById('kpi-cost').innerText = nt(v.cost_at_current_price);
+            document.getElementById('kpi-volume-diff').innerHTML = prev
+                ? `${diffSpan(v.total_volume - prev.total_volume, n => n.toFixed(1) + ' m³')} 較 ${prev.version} 增減`
+                : '基準版本';
+            document.getElementById('kpi-cost-diff').innerHTML = prev
+                ? `${diffSpan(v.cost_at_current_price - prev.cost_at_current_price, nt)} 較 ${prev.version} 變動`
+                : '基準版本';
+
+            const keys = ORDER.filter(k => v.elements[k]);
+            document.getElementById('kpi-elements').innerText = v.element_count;
+            document.getElementById('kpi-elements-detail').innerText = keys.map(k => `${SHORT_NAMES[k]}: ${v.elements[k].count}`).join(' | ');
+
+            volumePieChart.data.labels = keys.map(k => ELEMENT_NAMES[k]);
+            volumePieChart.data.datasets[0].data = keys.map(k => v.elements[k].volume);
+            volumePieChart.data.datasets[0].backgroundColor = keys.map(k => COLORS[k]);
+            volumePieChart.update();
+
+            document.getElementById('pie-legend').innerHTML = keys.map(k => `
+                <div class="flex items-center space-x-2">
+                    <span class="w-3 h-3 rounded-full" style="background:${COLORS[k]}"></span>
+                    <span class="text-slate-400">${ELEMENT_NAMES[k].split(' (')[1].replace(')', '')}:</span>
+                    <strong class="text-slate-200">${(v.elements[k].volume / v.total_volume * 100).toFixed(1)}%</strong>
+                </div>`).join('');
+
+            const tbody = document.getElementById('quantities-table-body');
+            let sum = 0;
+            tbody.innerHTML = keys.map(k => {
+                const el = v.elements[k];
+                const price = priceFor(el, p);
+                const subtotal = el.volume * price;
+                sum += subtotal;
+                return `<tr class="hover:bg-dark-hover transition">
+                    <td class="p-2.5 font-medium text-white">${ELEMENT_NAMES[k]}</td>
+                    <td class="p-2.5 text-slate-400">${el.spec}</td>
+                    <td class="p-2.5 text-right text-cyan-400">${el.volume.toFixed(2)}</td>
+                    <td class="p-2.5 text-right">${nt(price)}</td>
+                    <td class="p-2.5 text-right text-emerald-400 font-semibold">${nt(subtotal)}</td>
+                </tr>`;
+            }).join('');
+            document.getElementById('table-total-sum').innerText = `合計: ${nt(sum)}`;
+        }
+
+        function renderLogs() {
+            document.getElementById('terminal-logs').innerHTML = data.logs.map(l =>
+                `<div class="text-slate-400">[${l.time}] <span class="${TAG_COLORS[l.tag] || 'text-slate-300'}">${l.tag}</span> ${l.msg}</div>`
+            ).join('');
+        }
+
+        init();
+    </script>
+</body>
+</html>

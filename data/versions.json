@@ -1,0 +1,104 @@
+[
+  {
+    "version": "V1",
+    "model_name": "專題-結構.rvt",
+    "note": "初始設計",
+    "author": "Zzzero",
+    "detected_at": "2026-08-07",
+    "hash": "f9a04c63e7de",
+    "elements": {
+      "floors": {
+        "volume": 640.0,
+        "count": 32,
+        "spec": "280 kgf/cm² 預拌混凝土",
+        "grade": "280"
+      },
+      "columns": {
+        "volume": 380.0,
+        "count": 72,
+        "spec": "350 kgf/cm² 預拌混凝土",
+        "grade": "350"
+      },
+      "beams": {
+        "volume": 320.0,
+        "count": 120,
+        "spec": "280 kgf/cm² 預拌混凝土",
+        "grade": "280"
+      },
+      "walls": {
+        "volume": 180.0,
+        "count": 186,
+        "spec": "280 kgf/cm² 預拌混凝土",
+        "grade": "280"
+      }
+    }
+  },
+  {
+    "version": "V2",
+    "model_name": "專題-結構.rvt",
+    "note": "結構加強版",
+    "author": "Zzzero",
+    "detected_at": "2026-08-28",
+    "hash": "a4ddb28fb71a",
+    "elements": {
+      "floors": {
+        "volume": 720.0,
+        "count": 34,
+        "spec": "280 kgf/cm² 預拌混凝土",
+        "grade": "280"
+      },
+      "columns": {
+        "volume": 420.0,
+        "count": 78,
+        "spec": "350 kgf/cm² 預拌混凝土",
+        "grade": "350"
+      },
+      "beams": {
+        "volume": 350.0,
+        "count": 132,
+        "spec": "280 kgf/cm² 預拌混凝土",
+        "grade": "280"
+      },
+      "walls": {
+        "volume": 232.2,
+        "count": 208,
+        "spec": "280 kgf/cm² 預拌混凝土",
+        "grade": "280"
+      }
+    }
+  },
+  {
+    "version": "V3",
+    "model_name": "專題-結構-最終版.rvt",
+    "note": "審查定案版",
+    "author": "Zzzero",
+    "detected_at": "2026-09-25",
+    "hash": "904f874fe702",
+    "elements": {
+      "floors": {
+        "volume": 773.85,
+        "count": 36,
+        "spec": "280 kgf/cm² 預拌混凝土",
+        "grade": "280"
+      },
+      "columns": {
+        "volume": 442.2,
+        "count": 84,
+        "spec": "350 kgf/cm² 預拌混凝土",
+        "grade": "350"
+      },
+      "beams": {
+        "volume": 368.5,
+        "count": 142,
+        "spec": "280 kgf/cm² 預拌混凝土",
+        "grade": "280"
+      },
+      "walls": {
+        "volume": 257.95,
+        "count": 224,
+        "spec": "280 kgf/cm² 預拌混凝土",
+        "grade": "280"
+      }
+    }
+  }
+]

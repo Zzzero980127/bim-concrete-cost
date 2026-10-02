@@ -1,0 +1,36 @@
+name: BIM 混凝土成本自動估算
+
+on:
+  schedule:
+    - cron: '0 0 * * *'        # 每天台灣時間 08:00（GitHub 用 UTC）
+  workflow_dispatch:            # GitHub 網頁上的手動「Run workflow」按鈕
+  push:
+    paths:                      # 上傳新的 Takeoff 匯出檔或改單價時，立刻重算
+      - 'data/quantities.*'
+      - 'data/unit_prices.csv'
+      - 'data/model_info.json'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install openpyxl
+
+      - run: python scripts/build_data.py
+
+      - name: 把計算結果存回 repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data.json data/versions.json data/price_history.csv
+          git diff --cached --quiet || git commit -m "自動更新成本估算 $(date +%F)"
+          git push
