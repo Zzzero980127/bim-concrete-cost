@@ -83,8 +83,8 @@
                     <i class="fa-solid fa-chart-line text-8xl"></i>
                 </div>
                 <div class="flex justify-between items-start mb-2">
-                    <span class="text-xs text-slate-400 font-medium tracking-wider">最新混凝土單價</span>
-                    <span class="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono" id="price-date">--</span>
+                    <span class="text-xs text-slate-400 font-medium tracking-wider">最新混凝土單價（<span id="price-region">--</span>）</span>
+                    <span class="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono" id="price-month">--</span>
                 </div>
                 <div>
                     <div class="flex items-baseline space-x-2">
@@ -92,7 +92,7 @@
                         <span class="text-xs text-slate-400">/ m³</span>
                         <span class="text-xs font-medium" id="price-280-change"></span>
                     </div>
-                    <p class="text-xs text-slate-400 mt-1">基準：280 kgf/cm² 預拌混凝土</p>
+                    <p class="text-xs text-slate-400 mt-1">280 kgf/cm² 預拌混凝土・工地交貨</p>
                 </div>
                 <div class="mt-3 pt-2 border-t border-dark-border/60 flex justify-between text-[11px] text-slate-400 font-mono">
                     <span>210 kgf: <strong class="text-slate-300" id="price-210">--</strong></span>
@@ -133,7 +133,7 @@
                 </div>
 
                 <p class="text-xs text-slate-400 mb-3">
-                    每天 08:00 自動執行：讀取 Takeoff 匯出的體積 → 取得最新單價 → 重新計算成本 → 更新本頁。上傳新的匯出檔時也會立即重算。
+                    每週一 08:00 自動檢查：讀取 Takeoff 匯出的體積 → 下載工程會單價與主計總處物價指數 → 重新計算成本 → 更新本頁。上傳新的匯出檔時也會立即重算。
                 </p>
 
                 <div class="flex items-center space-x-3">
@@ -175,14 +175,14 @@
 
             <div class="bg-dark-card border border-dark-border rounded-xl p-4">
                 <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
-                    <span>本週成本變動（單價影響）</span>
+                    <span>本月成本變動（單價影響）</span>
                     <i class="fa-solid fa-tag text-emerald-400"></i>
                 </div>
                 <div class="flex items-baseline justify-between">
                     <span class="text-2xl font-bold font-mono text-white" id="kpi-price-effect">--</span>
                 </div>
                 <div class="mt-2 text-[11px] text-slate-400">
-                    <span>單價來源：<span id="price-source">--</span></span>
+                    <span>與上個月單價相比，體積不變</span>
                 </div>
             </div>
 
@@ -242,14 +242,14 @@
             </div>
         </div>
 
-        <!-- 每週成本追蹤 -->
+        <!-- 近 12 個月成本走勢 -->
         <div class="bg-dark-card border border-dark-border rounded-xl p-5">
             <div class="flex items-center justify-between mb-4">
                 <div>
                     <h3 class="text-sm font-semibold text-white flex items-center">
-                        <i class="fa-solid fa-chart-line mr-2 text-amber-400"></i>成本追蹤（模型版本 × 當時單價）
+                        <i class="fa-solid fa-chart-line mr-2 text-amber-400"></i>近 12 個月成本走勢（目前模型 × 每月單價）
                     </h3>
-                    <p class="text-xs text-slate-400">每個點是一次自動執行的結果；換版本的跳動來自體積變化，其餘起伏來自單價變化</p>
+                    <p class="text-xs text-slate-400">體積固定為目前版本，只看單價漲跌對總成本的影響</p>
                 </div>
             </div>
             <div class="relative h-56">
@@ -283,9 +283,9 @@
                     </div>
                 </div>
 
-                <div class="mt-4 pt-3 border-t border-dark-border flex items-center justify-between text-xs text-slate-400">
-                    <span>* 體積來自 Forma Takeoff 匯出檔，單價依各構件混凝土強度套用。</span>
-                    <span class="font-mono font-semibold text-white" id="table-total-sum">--</span>
+                <div class="mt-4 pt-3 border-t border-dark-border flex items-start justify-between gap-4 text-xs text-slate-400">
+                    <span>* 體積來自 Forma Takeoff 匯出檔；單價：<span id="price-note">--</span></span>
+                    <span class="font-mono font-semibold text-white" id="table-total-sum" style="white-space:nowrap">--</span>
                 </div>
             </div>
 
@@ -368,16 +368,18 @@
             document.getElementById('sample-badge').classList.toggle('hidden', !data.is_sample);
             document.getElementById('generated-at').innerText = data.generated_at;
             document.getElementById('pipeline-status-text').innerText = data.generated_at;
-            document.getElementById('price-date').innerText = data.price_date;
+            document.getElementById('price-month').innerText = data.price_month;
+            document.getElementById('price-region').innerText = data.region;
+            document.getElementById('price-note').innerHTML =
+                `工程會「預拌混凝土價格調查」${data.region} ${data.base_period} 基準價 × 主計總處營造工程物價指數「水泥及其製品類」（${data.base_period}：${data.base_index} → ${data.price_month}：${data.latest_index}）`;
             document.getElementById('price-280').innerText = nt(p['280']);
             document.getElementById('price-210').innerText = p['210'] ? nt(p['210']) : '--';
             document.getElementById('price-350').innerText = p['350'] ? nt(p['350']) : '--';
-            document.getElementById('price-source').innerText = data.price_source || '--';
 
             const pct = (p['280'] - prev['280']) / prev['280'] * 100;
             document.getElementById('price-280-change').innerHTML = diffSpan(pct, v => v.toFixed(1) + '%');
 
-            // 本週成本變動：只看單價造成的差異（同一個最新模型）
+            // 本月成本變動：只看單價造成的差異（同一個最新模型）
             const latest = data.versions[data.versions.length - 1];
             const effect = ORDER.filter(k => latest.elements[k]).reduce((acc, k) => {
                 const el = latest.elements[k];
@@ -423,12 +425,12 @@
             costHistoryChart = new Chart(document.getElementById('costHistoryChart'), {
                 type: 'line',
                 data: {
-                    labels: data.cost_history.map(c => c.date.slice(5)),
+                    labels: data.cost_history.map(c => c.month),
                     datasets: [{
                         label: '總成本 (NT$)',
                         data: data.cost_history.map(c => c.cost),
                         borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.12)', fill: true,
-                        borderWidth: 2, pointRadius: 3, stepped: false, tension: 0.2
+                        borderWidth: 2, pointRadius: 3, tension: 0.2
                     }]
                 },
                 options: {
@@ -439,7 +441,7 @@
                     },
                     plugins: {
                         legend: { display: false },
-                        tooltip: { callbacks: { label: c => ` ${data.cost_history[c.dataIndex].version}：${nt(c.raw)}` } }
+                        tooltip: { callbacks: { label: c => ` ${nt(c.raw)}` } }
                     }
                 }
             });

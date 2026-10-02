@@ -1,208 +1,149 @@
 {
-  "generated_at": "2026-10-02 23:48",
-  "is_sample": true,
-  "price_date": "2026-10-02",
-  "price_source": "示範資料（手動輸入）",
+  "generated_at": "2026-10-03 00:25",
+  "is_sample": false,
+  "region": "北區",
+  "price_month": "2026-08",
+  "base_period": "2026-04",
+  "base_index": 123.56,
+  "latest_index": 123.24,
   "prices": {
-    "210": 2980.0,
-    "280": 3250.0,
-    "350": 3600.0
+    "140": 2897,
+    "175": 2964,
+    "210": 3055,
+    "245": 3118,
+    "280": 3252,
+    "315": 3318,
+    "350": 3418,
+    "420": 3649
   },
   "previous_prices": {
-    "210": 2970.0,
-    "280": 3195.0,
-    "350": 3590.0
+    "140": 2900,
+    "175": 2967,
+    "210": 3058,
+    "245": 3121,
+    "280": 3254,
+    "315": 3321,
+    "350": 3421,
+    "420": 3652
   },
   "versions": [
     {
       "version": "V1",
       "model_name": "專題-結構.rvt",
-      "note": "初始設計",
+      "note": "第一版",
       "author": "Zzzero",
-      "detected_at": "2026-08-07",
-      "hash": "f9a04c63e7de",
+      "detected_at": "2026-10-03",
+      "hash": "63f19ee1efa1",
       "elements": {
         "floors": {
-          "volume": 640.0,
-          "count": 32,
-          "spec": "280 kgf/cm² 預拌混凝土",
-          "grade": "280"
+          "volume": 2222.52,
+          "count": 434,
+          "grade": "280",
+          "spec": "280 kgf/cm² 預拌混凝土"
         },
         "columns": {
-          "volume": 380.0,
-          "count": 72,
-          "spec": "350 kgf/cm² 預拌混凝土",
-          "grade": "350"
+          "volume": 657.11,
+          "count": 455,
+          "grade": "280",
+          "spec": "280 kgf/cm² 預拌混凝土"
         },
         "beams": {
-          "volume": 320.0,
-          "count": 120,
-          "spec": "280 kgf/cm² 預拌混凝土",
-          "grade": "280"
-        },
-        "walls": {
-          "volume": 180.0,
-          "count": 186,
-          "spec": "280 kgf/cm² 預拌混凝土",
-          "grade": "280"
+          "volume": 1583.89,
+          "count": 810,
+          "grade": "280",
+          "spec": "280 kgf/cm² 預拌混凝土"
         }
       },
-      "total_volume": 1520.0,
-      "element_count": 410,
-      "cost_at_current_price": 5073000
-    },
-    {
-      "version": "V2",
-      "model_name": "專題-結構.rvt",
-      "note": "結構加強版",
-      "author": "Zzzero",
-      "detected_at": "2026-08-28",
-      "hash": "a4ddb28fb71a",
-      "elements": {
-        "floors": {
-          "volume": 720.0,
-          "count": 34,
-          "spec": "280 kgf/cm² 預拌混凝土",
-          "grade": "280"
-        },
-        "columns": {
-          "volume": 420.0,
-          "count": 78,
-          "spec": "350 kgf/cm² 預拌混凝土",
-          "grade": "350"
-        },
-        "beams": {
-          "volume": 350.0,
-          "count": 132,
-          "spec": "280 kgf/cm² 預拌混凝土",
-          "grade": "280"
-        },
-        "walls": {
-          "volume": 232.2,
-          "count": 208,
-          "spec": "280 kgf/cm² 預拌混凝土",
-          "grade": "280"
-        }
-      },
-      "total_volume": 1722.2,
-      "element_count": 452,
-      "cost_at_current_price": 5744150
-    },
-    {
-      "version": "V3",
-      "model_name": "專題-結構-最終版.rvt",
-      "note": "審查定案版",
-      "author": "Zzzero",
-      "detected_at": "2026-09-25",
-      "hash": "904f874fe702",
-      "elements": {
-        "floors": {
-          "volume": 773.85,
-          "count": 36,
-          "spec": "280 kgf/cm² 預拌混凝土",
-          "grade": "280"
-        },
-        "columns": {
-          "volume": 442.2,
-          "count": 84,
-          "spec": "350 kgf/cm² 預拌混凝土",
-          "grade": "350"
-        },
-        "beams": {
-          "volume": 368.5,
-          "count": 142,
-          "spec": "280 kgf/cm² 預拌混凝土",
-          "grade": "280"
-        },
-        "walls": {
-          "volume": 257.95,
-          "count": 224,
-          "spec": "280 kgf/cm² 預拌混凝土",
-          "grade": "280"
-        }
-      },
-      "total_volume": 1842.5,
-      "element_count": 486,
-      "cost_at_current_price": 6142895
+      "total_volume": 4463.52,
+      "element_count": 1699,
+      "cost_at_current_price": 14515367
     }
   ],
   "cost_history": [
     {
-      "date": "2026-08-07",
-      "version": "V1",
-      "cost": 4974200
+      "month": "2025-09",
+      "cost": 14600174
     },
     {
-      "date": "2026-08-14",
-      "version": "V1",
-      "cost": 5000800
+      "month": "2025-10",
+      "cost": 14591247
     },
     {
-      "date": "2026-08-21",
-      "version": "V1",
-      "cost": 5000800
+      "month": "2025-11",
+      "cost": 14591247
     },
     {
-      "date": "2026-08-28",
-      "version": "V2",
-      "cost": 5679462
+      "month": "2025-12",
+      "cost": 14586783
     },
     {
-      "date": "2026-09-04",
-      "version": "V2",
-      "cost": 5696684
+      "month": "2026-01",
+      "cost": 14577856
     },
     {
-      "date": "2026-09-11",
-      "version": "V2",
-      "cost": 5696684
+      "month": "2026-02",
+      "cost": 14573393
     },
     {
-      "date": "2026-09-18",
-      "version": "V2",
-      "cost": 5713906
+      "month": "2026-03",
+      "cost": 14582320
     },
     {
-      "date": "2026-09-25",
-      "version": "V3",
-      "cost": 6061456
+      "month": "2026-04",
+      "cost": 14551075
     },
     {
-      "date": "2026-10-02",
-      "version": "V3",
-      "cost": 6142895
+      "month": "2026-05",
+      "cost": 14551075
+    },
+    {
+      "month": "2026-06",
+      "cost": 14551075
+    },
+    {
+      "month": "2026-07",
+      "cost": 14524294
+    },
+    {
+      "month": "2026-08",
+      "cost": 14515367
     }
   ],
   "logs": [
     {
-      "time": "23:48:39",
+      "time": "00:25:00",
       "tag": "INFO",
-      "msg": "開始估算（2026-10-02）"
+      "msg": "開始估算（2026-10-03）"
     },
     {
-      "time": "23:48:39",
+      "time": "00:25:03",
       "tag": "TAKEOFF",
-      "msg": "讀取 quantities.csv：4 類構件，總體積 1,842.50 m³"
+      "msg": "讀取 quantities.xlsx：3 類構件，總體積 4,463.52 m³"
     },
     {
-      "time": "23:48:39",
+      "time": "00:25:03",
       "tag": "MODEL",
-      "msg": "體積檔案沒有變動，沿用 V3"
+      "msg": "體積檔案沒有變動，沿用 V1"
     },
     {
-      "time": "23:48:39",
+      "time": "00:25:03",
       "tag": "PRICE",
-      "msg": "取得單價 210 kgf = NT$ 2,980、280 kgf = NT$ 3,250、350 kgf = NT$ 3,600"
+      "msg": "工程會基準價（2026-04・北區）280 kgf = NT$ 3,260"
     },
     {
-      "time": "23:48:39",
+      "time": "00:25:05",
       "tag": "PRICE",
-      "msg": "價格歷史共 9 天"
+      "msg": "主計總處水泥類指數 最新 2026-08 = 123.24"
     },
     {
-      "time": "23:48:39",
+      "time": "00:25:05",
+      "tag": "PRICE",
+      "msg": "換算後 2026-08 單價：210 kgf NT$ 3,055、280 kgf NT$ 3,252、350 kgf NT$ 3,418"
+    },
+    {
+      "time": "00:25:05",
       "tag": "SUCCESS",
-      "msg": "V3 總體積 1,842.50 m³，總成本 NT$ 6,142,895"
+      "msg": "V1 總體積 4,463.52 m³，總成本 NT$ 14,515,367"
     }
   ]
 }

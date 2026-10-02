@@ -3,23 +3,31 @@ BIM 混凝土成本自動估算：把 Forma Takeoff 匯出的體積 × 最新單
 
 輸入（都在 data/ 資料夾）：
   quantities.xlsx 或 quantities.csv  ← 從 Forma Takeoff 匯出，模型改版時覆蓋這一份就好
-  model_info.json                    ← 模型名稱與備註（選填）
-  unit_prices.csv                    ← 單價來源（之後可改成爬蟲，見 fetch_market_prices）
+  model_info.json                    ← 模型名稱、備註、工地區域、各構件混凝土強度
+
+單價（自動下載，皆為政府開放資料）：
+  基準價：公共工程委員會「大宗資材之混凝土價格調查」各強度、各區域單價
+  調整：  主計總處「營造工程物價指數」水泥及其製品類指數，每月更新
+  最新單價 = 基準價 × 最新月份指數 ÷ 基準價月份指數
 
 自動維護（不要手動改）：
-  versions.json       ← 偵測到 quantities 內容變動時，自動新增一個版本
-  price_history.csv   ← 每次執行記錄當天單價，同一天只記一次
+  versions.json      ← 偵測到 quantities 內容變動時，自動新增一個版本
+  price_cache.json   ← 最近一次成功下載的價格資料，網站連不上時拿來備用
 
 輸出：
-  data.json           ← 給 index.html 讀取
+  data.json          ← 給 index.html 讀取
 """
 
 import csv
 import hashlib
+import io
 import json
 import os
 import re
 import sys
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
 sys.stdout.reconfigure(encoding="utf-8")  # Windows 終端機預設 cp950，印不出 m³
@@ -27,16 +35,28 @@ sys.stdout.reconfigure(encoding="utf-8")  # Windows 終端機預設 cp950，印�
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(ROOT, "data")
 OUTPUT_FILE = os.path.join(ROOT, "data.json")
+CACHE_FILE = os.path.join(DATA_DIR, "price_cache.json")
 
 TW = timezone(timedelta(hours=8))
 
-# Takeoff 匯出的欄位名稱可能是中文或英文，這裡列出可接受的名稱（拿到實際匯出檔後再調整）
+PCC_PRICE_URL = ("https://pcic.pcc.gov.tw/pwc-web/api/service/opendata-file/document/"
+                 + urllib.parse.quote("預拌混凝土.csv"))
+DGBAS_INDEX_URL = "https://ws.dgbas.gov.tw/001/Upload/461/relfile/11525/230553/pr0501a1m.xml"
+INDEX_ITEM = "水泥及其製品類"
+
+DEFAULT_GRADE = "280"
+DEFAULT_REGION = "北區"
+HISTORY_MONTHS = 12
+
+# Takeoff 匯出的欄位名稱可能是中文或英文，這裡列出可接受的名稱
 COLUMN_ALIASES = {
-    "category": ["類別", "構件類別", "Category", "Classification", "Type"],
-    "spec": ["材質", "規格", "材料", "Material", "Description"],
-    "volume": ["體積", "體積(m3)", "體積 (m³)", "Volume", "Quantity"],
-    "count": ["數量", "個數", "Count"],
+    "category": ["計量類型", "類別", "構件類別", "Takeoff type", "Category", "Classification"],
+    "spec": ["材質", "規格", "材料", "Material"],
+    "volume": ["體積 (M3)", "體積", "體積(m3)", "體積 (m³)", "Volume (M3)", "Volume"],
+    "count": ["個數", "Count"],  # Takeoff 詳細資料一列就是一個構件，沒有這欄時每列算 1 個
+    "item": ["行項名稱", "Item name"],  # 只取「體積」這個行項，避免日後加了面積等行項被加進來
 }
+VOLUME_ITEMS = {"體積", "volume"}
 
 # 把 Revit/Takeoff 的類別名稱歸到四大類
 CATEGORY_KEYWORDS = {
@@ -51,9 +71,8 @@ logs = []
 
 def log(tag, msg):
     now = datetime.now(TW).strftime("%H:%M:%S")
-    line = f"[{now}] {tag} {msg}"
     logs.append({"time": now, "tag": tag, "msg": msg})
-    print(line)
+    print(f"[{now}] {tag} {msg}")
 
 
 def today():
@@ -61,12 +80,23 @@ def today():
     return os.environ.get("BUILD_DATE") or datetime.now(TW).strftime("%Y-%m-%d")
 
 
+def load_model_info():
+    path = os.path.join(DATA_DIR, "model_info.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
 # ---------- 讀取 Takeoff 匯出檔 ----------
 
 def read_table(path):
     if path.endswith(".xlsx"):
         from openpyxl import load_workbook
-        ws = load_workbook(path, data_only=True).active
+        wb = load_workbook(path, data_only=True)
+        # Takeoff 匯出檔第一頁是摘要，逐構件明細在「詳細資料 - …」那一頁
+        detail = [ws for ws in wb.worksheets if ws.title.startswith(("詳細資料", "Details"))]
+        ws = detail[0] if detail else wb.active
         rows = [[("" if c is None else str(c)).strip() for c in r] for r in ws.iter_rows(values_only=True)]
     else:
         with open(path, encoding="utf-8-sig", newline="") as f:
@@ -91,16 +121,16 @@ def classify(category):
     return None
 
 
-def parse_grade(spec):
-    m = re.search(r"(\d{3})\s*kgf", spec or "")
-    return m.group(1) if m else "280"
+def parse_grade(text):
+    m = re.search(r"(\d{3})\s*kgf", text or "")
+    return m.group(1) if m else None
 
 
 def to_number(value):
     return float(re.sub(r"[^\d.\-]", "", value or "0") or 0)
 
 
-def load_quantities():
+def load_quantities(grades):
     for name in ("quantities.xlsx", "quantities.csv"):
         path = os.path.join(DATA_DIR, name)
         if os.path.exists(path):
@@ -113,11 +143,19 @@ def load_quantities():
 
     elements = {}
     for row in read_table(path):
+        item = pick(row, "item")
+        if item and item.strip().lower() not in VOLUME_ITEMS:
+            continue
         key = classify(pick(row, "category"))
         if not key:
             continue
         spec = pick(row, "spec") or ""
-        el = elements.setdefault(key, {"volume": 0.0, "count": 0, "spec": spec, "grade": parse_grade(spec)})
+        # Takeoff 匯出檔沒有混凝土強度，可在 model_info.json 的 "grades" 指定，例如 {"columns": "350"}
+        grade = parse_grade(spec) or str(grades.get(key, DEFAULT_GRADE))
+        el = elements.setdefault(key, {
+            "volume": 0.0, "count": 0, "grade": grade,
+            "spec": spec or f"{grade} kgf/cm² 預拌混凝土",
+        })
         el["volume"] += to_number(pick(row, "volume"))
         el["count"] += int(to_number(pick(row, "count") or "1"))
 
@@ -125,101 +163,157 @@ def load_quantities():
         el["volume"] = round(el["volume"], 2)
 
     log("TAKEOFF", f"讀取 {name}：{len(elements)} 類構件，總體積 {sum(e['volume'] for e in elements.values()):,.2f} m³")
-    return name, digest, elements
+    return digest, elements
 
 
-# ---------- 單價 ----------
+# ---------- 單價（政府開放資料） ----------
 
-def fetch_market_prices():
-    """
-    取得最新單價，回傳 {"280": 3250, ...} 與來源說明。
-    目前讀 data/unit_prices.csv（手動維護）。決定好外部價格網站後，
-    把爬蟲寫在這裡、回傳相同格式即可，其他程式不用改。
-    """
-    prices, source = {}, ""
-    with open(os.path.join(DATA_DIR, "unit_prices.csv"), encoding="utf-8-sig", newline="") as f:
-        for row in csv.DictReader(f):
-            prices[row["grade"].strip()] = float(row["price"])
-            source = row.get("source", "").strip() or source
-    log("PRICE", "取得單價 " + "、".join(f"{g} kgf = NT$ {p:,.0f}" for g, p in sorted(prices.items())))
-    return prices, source
+def download(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (bim-concrete-cost)"})
+    with urllib.request.urlopen(req, timeout=60) as res:
+        return res.read()
 
 
-def update_price_history(date, prices, source):
-    path = os.path.join(DATA_DIR, "price_history.csv")
-    rows = []
-    if os.path.exists(path):
-        with open(path, encoding="utf-8-sig", newline="") as f:
-            rows = list(csv.DictReader(f))
+def roc_to_month(roc):
+    """民國年月 11504 → 2025-04"""
+    roc = roc.strip()
+    return f"{int(roc[:-2]) + 1911}-{roc[-2:]}"
 
-    rows = [r for r in rows if r["date"] != date]  # 同一天重跑就覆蓋當天紀錄
-    for grade, price in sorted(prices.items()):
-        rows.append({"date": date, "grade": grade, "price": f"{price:g}", "source": source})
-    rows.sort(key=lambda r: (r["date"], r["grade"]))
 
-    with open(path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["date", "grade", "price", "source"])
-        writer.writeheader()
-        writer.writerows(rows)
+def fetch_base_prices(region):
+    """工程會預拌混凝土價格調查：回傳 (基準月份, {強度: 單價})，只取最新一期、指定區域。"""
+    raw = download(PCC_PRICE_URL)
+    for enc in ("utf-8-sig", "big5"):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
 
-    history = {}
-    for r in rows:
-        history.setdefault(r["date"], {})[r["grade"]] = float(r["price"])
-    log("PRICE", f"價格歷史共 {len(history)} 天")
-    return history
+    by_period = {}
+    for row in csv.DictReader(io.StringIO(text)):
+        item = row.get("調查項目", "")
+        if "預拌混凝土材料費" not in item or row.get("調查地區", "").strip() != region:
+            continue
+        grade = parse_grade(item)
+        if grade:
+            by_period.setdefault(roc_to_month(row["調查時間"]), {})[grade] = to_number(row["價格"])
+
+    if not by_period:
+        raise ValueError(f"價格檔裡找不到「{region}」的預拌混凝土資料")
+    period = max(by_period)
+    return period, by_period[period]
+
+
+def fetch_cement_index():
+    """主計總處營造工程物價指數：回傳 {"2026-08": 123.24, ...}（水泥及其製品類、原始值）。"""
+    root = ET.fromstring(download(DGBAS_INDEX_URL))
+    series = {}
+    for obs in root.iter("Obs"):
+        if INDEX_ITEM not in (obs.findtext("Item") or "") or obs.findtext("TYPE") != "原始值":
+            continue
+        value = (obs.findtext("Item_VALUE") or "").strip()
+        if value:
+            y, m = obs.findtext("TIME_PERIOD").split("M")
+            series[f"{y}-{m}"] = float(value)
+    if not series:
+        raise ValueError(f"物價指數檔裡找不到「{INDEX_ITEM}」")
+    return series
+
+
+def load_price_data(region):
+    cache = {}
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE, encoding="utf-8") as f:
+            cache = json.load(f)
+
+    try:
+        base_period, base_prices = fetch_base_prices(region)
+        log("PRICE", f"工程會基準價（{base_period}・{region}）280 kgf = NT$ {base_prices.get('280', 0):,.0f}")
+        cache.update({"region": region, "base_period": base_period, "base_prices": base_prices})
+    except Exception as e:
+        if cache.get("region") != region:
+            raise
+        log("WARN", f"工程會價格下載失敗（{e}），改用上次的資料")
+
+    try:
+        index = fetch_cement_index()
+        latest = max(index)
+        log("PRICE", f"主計總處水泥類指數 最新 {latest} = {index[latest]}")
+        cache["index"] = index
+    except Exception as e:
+        if "index" not in cache:
+            raise
+        log("WARN", f"物價指數下載失敗（{e}），改用上次的資料")
+
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+    return cache
+
+
+def prices_for(month, cache):
+    """把基準價依指數換算到指定月份。基準月份沒有指數時，直接用基準價。"""
+    index = cache["index"]
+    base_idx = index.get(cache["base_period"])
+    ratio = index[month] / base_idx if base_idx and month in index else 1.0
+    return {g: round(p * ratio) for g, p in cache["base_prices"].items()}
+
+
+def cost_of(elements, prices):
+    fallback = prices.get(DEFAULT_GRADE) or next(iter(prices.values()))
+    return sum(el["volume"] * prices.get(el["grade"], fallback) for el in elements.values())
 
 
 # ---------- 版本 ----------
 
-def update_versions(date, filename, digest, elements):
+def update_versions(date, digest, elements, info):
     path = os.path.join(DATA_DIR, "versions.json")
     versions = []
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             versions = json.load(f)
 
-    if versions and versions[-1]["hash"] == digest:
+    if versions and versions[-1]["hash"] == digest and versions[-1]["elements"] == elements:
         log("MODEL", f"體積檔案沒有變動，沿用 {versions[-1]['version']}")
         return versions
 
-    info = {}
-    info_path = os.path.join(DATA_DIR, "model_info.json")
-    if os.path.exists(info_path):
-        with open(info_path, encoding="utf-8") as f:
-            info = json.load(f)
+    if versions and versions[-1]["hash"] == digest:
+        # 同一份檔案，只是強度設定改了：更新目前版本，不另開新版本
+        versions[-1]["elements"] = elements
+        log("MODEL", f"混凝土強度設定變更，更新 {versions[-1]['version']}")
+    else:
+        versions.append({
+            "version": f"V{len(versions) + 1}",
+            "model_name": info.get("model_name", "quantities"),
+            "note": info.get("note", ""),
+            "author": info.get("author", ""),
+            "detected_at": date,
+            "hash": digest,
+            "elements": elements,
+        })
+        log("MODEL", f"偵測到新的體積檔案，建立 {versions[-1]['version']}（{versions[-1]['model_name']}）")
 
-    version = {
-        "version": f"V{len(versions) + 1}",
-        "model_name": info.get("model_name", filename),
-        "note": info.get("note", ""),
-        "author": info.get("author", ""),
-        "detected_at": date,
-        "hash": digest,
-        "elements": elements,
-    }
-    versions.append(version)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(versions, f, ensure_ascii=False, indent=2)
-    log("MODEL", f"偵測到新的體積檔案，建立 {version['version']}（{version['model_name']}）")
     return versions
-
-
-def cost_of(elements, prices):
-    fallback = prices.get("280") or next(iter(prices.values()))
-    return sum(el["volume"] * prices.get(el["grade"], fallback) for el in elements.values())
 
 
 # ---------- 主程式 ----------
 
 def main():
     date = today()
+    info = load_model_info()
+    region = info.get("region", DEFAULT_REGION)
     log("INFO", f"開始估算（{date}）")
 
-    filename, digest, elements = load_quantities()
-    versions = update_versions(date, filename, digest, elements)
+    digest, elements = load_quantities(info.get("grades", {}))
+    versions = update_versions(date, digest, elements, info)
 
-    prices, source = fetch_market_prices()
-    history = update_price_history(date, prices, source)
+    cache = load_price_data(region)
+    months = sorted(cache["index"])
+    latest, previous = months[-1], months[-2]
+    prices = prices_for(latest, cache)
+    log("PRICE", f"換算後 {latest} 單價：" + "、".join(f"{g} kgf NT$ {prices[g]:,}" for g in ("210", "280", "350") if g in prices))
 
     # 每個版本都用「目前單價」計算，版本之間才能公平比較
     for v in versions:
@@ -227,31 +321,26 @@ def main():
         v["element_count"] = sum(e["count"] for e in v["elements"].values())
         v["cost_at_current_price"] = round(cost_of(v["elements"], prices))
 
-    # 每日成本：當天有效的模型版本 × 當天單價
-    cost_history = []
-    for d in sorted(history):
-        active = [v for v in versions if v["detected_at"] <= d] or versions[:1]
-        cost_history.append({"date": d, "version": active[-1]["version"], "cost": round(cost_of(active[-1]["elements"], history[d]))})
+    # 成本走勢：目前模型 × 過去 12 個月的單價
+    latest_version = versions[-1]
+    cost_history = [
+        {"month": m, "cost": round(cost_of(latest_version["elements"], prices_for(m, cache)))}
+        for m in months[-HISTORY_MONTHS:]
+    ]
 
-    dates = sorted(history)
-    previous_prices = history[dates[-2]] if len(dates) > 1 else prices
-
-    latest = versions[-1]
-    log("SUCCESS", f"{latest['version']} 總體積 {latest['total_volume']:,.2f} m³，總成本 NT$ {latest['cost_at_current_price']:,}")
-
-    info = {}
-    info_path = os.path.join(DATA_DIR, "model_info.json")
-    if os.path.exists(info_path):
-        with open(info_path, encoding="utf-8") as f:
-            info = json.load(f)
+    log("SUCCESS", f"{latest_version['version']} 總體積 {latest_version['total_volume']:,.2f} m³，"
+                   f"總成本 NT$ {latest_version['cost_at_current_price']:,}")
 
     output = {
         "generated_at": datetime.now(TW).strftime("%Y-%m-%d %H:%M"),
         "is_sample": bool(info.get("is_sample")),
-        "price_date": date,
-        "price_source": source,
+        "region": region,
+        "price_month": latest,
+        "base_period": cache["base_period"],
+        "base_index": cache["index"].get(cache["base_period"]),
+        "latest_index": cache["index"][latest],
         "prices": prices,
-        "previous_prices": previous_prices,
+        "previous_prices": prices_for(previous, cache),
         "versions": versions,
         "cost_history": cost_history,
         "logs": logs,
