@@ -24,6 +24,7 @@ import io
 import json
 import os
 import re
+import ssl
 import sys
 import urllib.parse
 import urllib.request
@@ -168,9 +169,16 @@ def load_quantities(grades):
 
 # ---------- 單價（政府開放資料） ----------
 
+def ssl_context():
+    # 政府網站常漏送中繼憑證（Windows 會自動補，Linux 不會），所以額外載入 TWCA 中繼憑證；仍是完整驗證
+    ctx = ssl.create_default_context()
+    ctx.load_verify_locations(cafile=os.path.join(ROOT, "scripts", "certs", "twca_secure_ssl_ca.pem"))
+    return ctx
+
+
 def download(url):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (bim-concrete-cost)"})
-    with urllib.request.urlopen(req, timeout=60) as res:
+    with urllib.request.urlopen(req, timeout=60, context=ssl_context()) as res:
         return res.read()
 
 
