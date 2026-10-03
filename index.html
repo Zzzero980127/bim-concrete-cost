@@ -345,8 +345,8 @@
             document.getElementById('run-pipeline-link').href = REPO_URL + '/actions/workflows/bim_auto_cost.yml';
 
             try {
-                const res = await fetch('data.json', { cache: 'no-store' });
-                data = await res.json();
+                // 離線版（scripts/export_offline.py 產生）會把資料直接嵌在頁面裡
+                data = window.EMBEDDED_DATA || await (await fetch('data.json', { cache: 'no-store' })).json();
             } catch (e) {
                 const box = document.getElementById('load-error');
                 box.classList.remove('hidden');

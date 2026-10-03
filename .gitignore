@@ -1,3 +1,4 @@
 .claude/
 __pycache__/
 /*.xlsx
+/*_離線版_*.html
